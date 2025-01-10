@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# Script d'installation pour Odoo 17 sur Ubuntu
+# Ce script configure PostgreSQL, installe les dépendances nécessaires, et configure Odoo.
+
+# ☆ Mise à jour du système
+echo "Mise à jour du système..."
+sudo apt update && sudo apt upgrade -y
+
+# ☆ Installation de PostgreSQL
+echo "Installation de PostgreSQL..."
+sudo apt install postgresql -y
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+sudo -u postgres createuser -s odoo
+
+# ☆ Installation des dépendances pour Odoo
+echo "Installation des dépendances pour Odoo..."
+sudo apt install python3 python3-pip build-essential libpq-dev libxml2-dev libxslt1-dev zlib1g-dev libldap2-dev libsasl2-dev libtiff5-dev libjpeg8-dev libopenjp2-7-dev liblcms2-dev libwebp-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev wkhtmltopdf -y
+
+# ☆ Configuration de l'utilisateur Odoo
+echo "Configuration de l'utilisateur Odoo..."
+sudo useradd -m -d /opt/odoo -U -r -s /bin/bash odoo
+sudo su - odoo -c "git clone --depth 1 --branch 17.0 https://github.com/odoo/odoo.git /opt/odoo/odoo"
+
+# ☆ Création d'un environnement virtuel Python
+echo "Création d'un environnement virtuel Python..."
+sudo su - odoo -c "python3 -m venv /opt/odoo/odoo-venv"
+sudo su - odoo -c "/opt/odoo/odoo-venv/bin/pip install -r /opt/odoo/odoo/requirements.txt"
+
+# ☆ Configuration d'Odoo
+echo "Configuration d'Odoo..."
+cat <<EOL | sudo tee /etc/odoo.conf
+[options]
+addons_path = /opt/odoo/odoo/addons
+db_host = False
+db_port = False
+db_user = odoo
+db_password = False
+logfile = /var/log/odoo/odoo.log
+EOL
+
+# ☆ Création du répertoire des journaux
+sudo mkdir -p /var/log/odoo
+sudo chown odoo:odoo /var/log/odoo
+
+# ☆ Configuration du service systemd pour Odoo
+echo "Configuration du service systemd pour Odoo..."
+cat <<EOL | sudo tee /etc/systemd/system/odoo.service
+[Unit]
+Description=Odoo 17
+After=network.target postgresql.service
+
+[Service]
+User=odoo
+Group=odoo
+ExecStart=/opt/odoo/odoo-venv/bin/python3 /opt/odoo/odoo/odoo-bin -c /etc/odoo.conf
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+# ☆ Activation et démarrage du service Odoo
+sudo systemctl daemon-reload
+sudo systemctl enable odoo
+sudo systemctl start odoo
+
+# ☆ Installation terminée
+echo "Odoo 17 est installé avec succès ! Accédez à http://<IP_SERVER>:8069 dans votre navigateur."
